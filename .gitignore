@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Runtime data (created when running)
+token_cache.json
+settings.json
+history.json
+dict_*.json
+app.log
+assets/cache/

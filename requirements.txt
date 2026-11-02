@@ -1,0 +1,8 @@
+# 下限版本（非鎖死），避免與使用者既有環境衝突。開發驗證於括號內版本。
+requests>=2.31.0       # (2.34.2)
+psutil>=5.9.0          # (5.9.8)
+cryptography>=42.0.0   # (49.0.0) 僅用於 Cookie 檔備援路徑的 AES-GCM
+pillow>=10.0.0         # (12.1.1) 系統匣圖示用（pystray 依賴）
+pystray>=0.19.0          # 系統匣（隱藏至右下角）；未安裝時該功能停用，程式照常執行
+pywebview>=5.0           # Webview 介面（Windows 用 WebView2；會一併帶入 pythonnet）
+# 前端另需 Node/npm 建置：cd web && npm install && npm run build（執行時不需 Node）
