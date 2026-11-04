@@ -34,10 +34,6 @@ COOKIE_NAMES = (config.COOKIE_TOKEN_NAME, config.COOKIE_EXPIRE_NAME)
 TOKEN_TEXT_RE = re.compile(r"[0-9a-f]{64}")
 
 
-def mask_token(tok) -> str:
-    return f"{tok[:6]}..." if tok else "None"
-
-
 # ---------------------------------------------------------------------------
 # 解析
 # ---------------------------------------------------------------------------
@@ -69,6 +65,30 @@ def extract_from_bytes(data: bytes) -> Optional[TokenInfo]:
         except ValueError:
             expire = None
     return TokenInfo(m.group(1).decode("ascii"), expire, "memory")
+
+
+def extract_all_from_bytes(data: bytes):
+    out = []
+    for m in TOKEN_RE.finditer(data):
+        lo = max(0, m.start() - EXPIRE_NEAR_BYTES)
+        hi = m.end() + EXPIRE_NEAR_BYTES
+        em = EXPIRE_RE.search(data, lo, hi)
+        expire = None
+        if em:
+            try:
+                expire = normalize_expire_ms(em.group(1))
+            except ValueError:
+                expire = None
+        out.append(TokenInfo(m.group(1).decode("ascii"), expire, "memory"))
+    return out
+
+
+def _pick_newest(cands):
+    best = None
+    for c in cands:
+        if best is None or (c.expire_ms or -1) > (best.expire_ms or -1):
+            best = c
+    return best
 
 
 # ---------------------------------------------------------------------------
@@ -142,24 +162,27 @@ def chunk_offsets(size: int, chunk: int = CHUNK_BYTES, overlap: int = CHUNK_OVER
         off += step
 
 
-def _scan_region(h, base: int, size: int) -> Optional[TokenInfo]:
+def _scan_region_tokens(h, base: int, size: int):
+    out = []
     buf = ctypes.create_string_buffer(min(size, CHUNK_BYTES))
     n = ctypes.c_size_t()
     for off, want in chunk_offsets(size):
         if not (_k32.ReadProcessMemory(h, ctypes.c_void_p(base + off), buf, want, ctypes.byref(n)) and n.value):
             break
-        info = extract_from_bytes(buf.raw[: n.value])
-        if info:
-            return info
+        out.extend(extract_all_from_bytes(buf.raw[: n.value]))
         if n.value < want:
             break
-    return None
+    return out
 
 
-def scan_pid(pid: int) -> Optional[TokenInfo]:
+def scan_pid(pid: int):
     h = _k32.OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
     if not h:
-        return None
+        err = ctypes.get_last_error()
+        log.info("memory scan: OpenProcess pid %s failed (err=%d%s)", pid, err,
+                 ", access denied" if err == 5 else "")
+        return []
+    cands = []
     try:
         mbi = MBI()
         addr = 0
@@ -172,25 +195,31 @@ def scan_pid(pid: int) -> Optional[TokenInfo]:
                 break
             if (mbi.State == MEM_COMMIT and mbi.Type == MEM_PRIVATE
                     and (mbi.Protect & READABLE_MASK) and not (mbi.Protect & PAGE_GUARD)):
-                info = _scan_region(h, base, size)
-                if info:
-                    return info
+                cands.extend(_scan_region_tokens(h, base, size))
             addr = base + size
-        return None
+        return cands
     finally:
         _k32.CloseHandle(h)
 
 
 def read_from_memory() -> Optional[TokenInfo]:
-    for pid in _renderer_pids():
+    pids = _renderer_pids()
+    if not pids:
+        log.info("memory scan: no Tappo renderer process found")
+        return None
+    cands = []
+    for pid in pids:
         try:
-            info = scan_pid(pid)
-        except Exception as e:  # 單一程序失敗不影響其他程序
-            log.debug("scan pid failed: %s", type(e).__name__)
-            continue
-        if info:
-            return info
-    return None
+            cands.extend(scan_pid(pid))
+        except Exception as e:
+            log.info("memory scan: pid %s read error: %s", pid, type(e).__name__)
+    if not cands:
+        log.info("memory scan: %d renderer pid(s) but token not found", len(pids))
+        return None
+    best = _pick_newest(cands)
+    log.info("memory scan: %d token candidate(s) across %d pid(s), picked newest (expire_ms=%s)",
+             len(cands), len(pids), best.expire_ms)
+    return best
 
 
 # ---------------------------------------------------------------------------

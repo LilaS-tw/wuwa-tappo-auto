@@ -1,6 +1,6 @@
 繁體中文 · [English](README.en.md)
 
-# Wuwa Tappo Auto v1.0.0
+# Wuwa Tappo Auto v1.0.1
 
 冷卻結束自動開啟寶箱，維持原本官方程式。
 (雖然叫做Auto，但沒有自動點擊功能)

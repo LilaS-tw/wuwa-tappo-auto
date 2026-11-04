@@ -27,7 +27,6 @@ def place_name(place: str) -> str:
     return t(PLACE_LABEL_KEY[place])
 
 ARRIVAL_MARGIN_MS = 1500
-COOLDOWN_MS = 30 * 60 * 1000
 DEFAULT_CHEST_COST = 1000
 NETWORK_RETRY_MS = 30 * 1000
 MAX_FAILURES = 3
@@ -102,6 +101,7 @@ class ChestScheduler:
     # 事件輸出（給 GUI）
     # ------------------------------------------------------------------
     def _log(self, msg: str) -> None:
+        log.info(msg)
         self.events.put(("log", f"[{time.strftime('%H:%M:%S')}] {msg}"))
 
     def _emit(self) -> None:
@@ -142,6 +142,11 @@ class ChestScheduler:
         self._on_token(info.token, info.expire_ms)
         src = t(f"source_{info.source}") if i18n.CATALOG["en"].get(f"source_{info.source}") else info.source
         self._log(t("log_got_token", mask=_mask(info.token), source=src))
+        if info.expire_ms:
+            log.info("token adopted (source=%s): expiry in %.1f days",
+                     info.source, (info.expire_ms - self._clock()) / 86400000.0)
+        else:
+            log.info("token adopted (source=%s): expiry unknown", info.source)
 
     def _reread_fresh(self):
         try:
@@ -164,6 +169,11 @@ class ChestScheduler:
         return self.sync()
 
     def _stop_for_auth(self) -> None:
+        if self.expire_ms:
+            log.info("auth stop: token already expired=%s (expire_ms=%d, now=%d)",
+                     self._clock() >= self.expire_ms, self.expire_ms, self._clock())
+        else:
+            log.info("auth stop: token expiry unknown")
         self.auto_enabled = False
         self.auth_stopped = True
         self._log(t("log_auth_stopped"))
@@ -422,6 +432,15 @@ class ChestScheduler:
     # ------------------------------------------------------------------
     # 外部指令（GUI 執行緒 -> 背景執行緒）
     # ------------------------------------------------------------------
+    def redetect(self) -> None:
+        self.auth_stopped = False
+        self.token = None
+        self.nickname = None
+        for p in PLACES:
+            self.paused[p] = False
+            self.failures[p] = 0
+        self.bootstrap(fresh=True)
+
     def set_auto(self, on: bool) -> None:
         self.auto_enabled = bool(on)
         if on:
@@ -453,7 +472,7 @@ class ChestScheduler:
             elif name == "open":
                 self.open_now(args[0])
             elif name == "redetect":
-                self.bootstrap(fresh=True)
+                self.redetect()
             elif name == "ensure_dict":
                 self._start_names_fetch()
 

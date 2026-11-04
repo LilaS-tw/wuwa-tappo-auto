@@ -4,7 +4,7 @@ import os
 import sys
 from dataclasses import dataclass
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 
 def resource_path(rel: str) -> str:
@@ -86,11 +86,9 @@ def detect_profile() -> Profile:
 # --- 啟動時解析使用中的設定檔，並匯出常用常數供其他模組直接引用 ---------
 ACTIVE = detect_profile()
 
-APP_BUNDLE = ACTIVE.bundle
 ENVIRONMENT = ACTIVE.environment
 API_BASE = ACTIVE.api_base
 CLICK_XOR_KEY = ACTIVE.click_xor_key
-CLICK_FILENAME = ACTIVE.click_filename
 
 # WebView2 程序（記憶體掃描用）
 WEBVIEW_PROCESS = "msedgewebview2.exe"

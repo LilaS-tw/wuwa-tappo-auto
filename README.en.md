@@ -1,6 +1,6 @@
 [繁體中文](README.md) · English
 
-# Wuwa Tappo Auto v1.0.0
+# Wuwa Tappo Auto v1.0.1
 
 Automatically opens the two treasure chests when their cooldown ends, while you keep using the official app as usual.
 (Despite the "Auto" name, there is no auto-clicking.)
